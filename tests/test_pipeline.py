@@ -183,3 +183,57 @@ class TestCLI:
         assert "Drift Tracker Observability Report" in proc.stdout
         assert "credit_score" in proc.stdout
         assert "pred_proba" in proc.stdout
+
+
+class TestFailOnExitCode:
+    @staticmethod
+    def _report(status: str):
+        from src.models import DriftReport, SchemaCheckResult
+
+        return DriftReport(
+            reference_rows=10,
+            current_rows=10,
+            overall_status=status,
+            schema=SchemaCheckResult(
+                missing_columns=[], extra_columns=[], shared_columns=[], dtype_mismatches={}, status="OK"
+            ),
+        )
+
+    def test_fail_on_none_always_succeeds(self):
+        from main import exit_code_for
+
+        assert exit_code_for(self._report("ALERT"), "none") == 0
+
+    def test_fail_on_alert_gates_on_alert(self):
+        from main import exit_code_for
+
+        assert exit_code_for(self._report("ALERT"), "alert") == 1
+        assert exit_code_for(self._report("WARN"), "alert") == 0
+        assert exit_code_for(self._report("OK"), "alert") == 0
+
+    def test_fail_on_warn_gates_on_warn_and_alert(self):
+        from main import exit_code_for
+
+        assert exit_code_for(self._report("WARN"), "warn") == 1
+        assert exit_code_for(self._report("ALERT"), "warn") == 1
+        assert exit_code_for(self._report("OK"), "warn") == 0
+
+    def test_fail_on_rejects_unknown_level(self):
+        import pytest
+
+        from main import exit_code_for
+
+        with pytest.raises(ValueError, match="fail_on must be one of"):
+            exit_code_for(self._report("OK"), "bogus")
+
+    def test_cli_default_still_exits_zero(self, capsys):
+        import main as cli_main
+
+        code = cli_main.main(["--demo"])
+        assert code == 0
+
+    def test_cli_fail_on_alert_fails_on_drifted_demo(self, capsys):
+        import main as cli_main
+
+        code = cli_main.main(["--demo", "--fail-on", "alert"])
+        assert code == 1

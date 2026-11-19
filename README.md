@@ -48,6 +48,23 @@ python main.py \
 
 Use `--demo` to generate fresh synthetic reference & drifted batches in memory.
 
+### Gating a pipeline with `--fail-on`
+
+By default the CLI always exits `0`, so a monitoring job cannot gate on drift.
+`--fail-on` turns findings into a non-zero exit code:
+
+| Value | Exits `1` when |
+|---|---|
+| `none` (default) | Never — preserves the historical behavior. |
+| `alert` | The overall status is `ALERT`. |
+| `warn` | The overall status is `WARN` or `ALERT`. |
+
+```bash
+python main.py --reference ref.csv --current cur.csv --fail-on alert
+```
+
+An unknown level is rejected by argparse rather than silently disabling the gate.
+
 ### Sample Output
 
 Output from `python main.py`:
