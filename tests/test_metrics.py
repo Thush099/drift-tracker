@@ -13,6 +13,10 @@ from src.metrics import (
     compute_js_numeric,
     compute_ks_test,
     compute_psi,
+    max_severity,
+    _build_quantile_edges,
+    _smoothed_proportions,
+    _to_finite_array,
 )
 
 
@@ -86,3 +90,37 @@ class TestCategoricalMetrics:
         assert classify_js(js) == "ALERT"
         assert new_cats == ["Contractor"]
         assert psi > 0.25
+
+
+class TestSeverityAndHistogramHelpers:
+    def test_max_severity_ranks_alert_above_warn_above_ok(self) -> None:
+        assert max_severity("OK", "WARN", "ALERT") == "ALERT"
+        assert max_severity("WARN", "OK") == "WARN"
+        assert max_severity("OK", "OK") == "OK"
+
+    def test_max_severity_ignores_unknown_status_strings(self) -> None:
+        assert max_severity("NOT_A_STATUS", "OK") == "OK"
+        assert max_severity("NOT_A_STATUS", "ALERT") == "ALERT"
+
+    def test_to_finite_array_drops_nan_and_inf(self) -> None:
+        arr = _to_finite_array([1.0, float("nan"), 2.0, float("inf"), -3.0])
+        assert arr.tolist() == [1.0, 2.0, -3.0]
+
+    def test_build_quantile_edges_rejects_tiny_bin_count(self) -> None:
+        with pytest.raises(ValueError, match="n_bins"):
+            _build_quantile_edges(np.arange(10.0), n_bins=1)
+
+    def test_build_quantile_edges_are_unique_and_sorted(self) -> None:
+        reference = np.zeros(100)
+        edges = _build_quantile_edges(reference, n_bins=10)
+        assert len(edges) >= 2
+        assert np.all(np.diff(edges) > 0)
+
+    def test_smoothed_proportions_uniform_when_no_mass(self) -> None:
+        probs = _smoothed_proportions(np.zeros(4), eps=0.0)
+        assert probs == pytest.approx(np.full(4, 0.25))
+
+    def test_smoothed_proportions_sum_to_one(self) -> None:
+        probs = _smoothed_proportions(np.array([3.0, 1.0, 0.0]), eps=1e-6)
+        assert probs.sum() == pytest.approx(1.0)
+        assert np.all(probs > 0.0)
