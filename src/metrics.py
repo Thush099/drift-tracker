@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from numbers import Integral
 from typing import Any, Literal, Sequence
 
 import numpy as np
@@ -56,9 +57,18 @@ def _to_finite_array(values: Sequence[float] | np.ndarray | pd.Series) -> np.nda
     return arr[np.isfinite(arr)]
 
 
+def _validate_n_bins(n_bins: int) -> None:
+    if isinstance(n_bins, bool) or not isinstance(n_bins, Integral) or n_bins < 2:
+        raise ValueError(f"n_bins must be an integer >= 2, got {n_bins}")
+
+
+def _validate_eps(eps: float) -> None:
+    if not np.isfinite(eps) or eps <= 0.0:
+        raise ValueError(f"eps must be finite and positive, got {eps}")
+
+
 def _build_quantile_edges(reference: np.ndarray, n_bins: int = 10) -> np.ndarray:
-    if n_bins < 2:
-        raise ValueError(f"n_bins must be >= 2, got {n_bins}")
+    _validate_n_bins(n_bins)
     quantiles = np.linspace(0.0, 1.0, n_bins + 1)
     edges = np.unique(np.quantile(reference, quantiles))
     if len(edges) < 2:
@@ -86,6 +96,8 @@ def compute_psi(
     eps: float = 1e-6,
 ) -> float:
     """Compute Population Stability Index (PSI) with quantile binning and smoothing."""
+    _validate_n_bins(n_bins)
+    _validate_eps(eps)
     ref_clean = _to_finite_array(reference)
     cur_clean = _to_finite_array(current)
     if ref_clean.size == 0 and cur_clean.size == 0:
@@ -109,6 +121,7 @@ def compute_discrete_psi(
     eps: float = 1e-6,
 ) -> float:
     """Compute PSI across discrete classes or categories with smoothing."""
+    _validate_eps(eps)
     ref_s = pd.Series(reference).dropna().astype(str)
     cur_s = pd.Series(current).dropna().astype(str)
     if ref_s.empty and cur_s.empty:
@@ -150,6 +163,8 @@ def compute_js_numeric(
     eps: float = 1e-8,
 ) -> float:
     """Compute base-2 Jensen-Shannon divergence in [0, 1] for numeric samples."""
+    _validate_n_bins(n_bins)
+    _validate_eps(eps)
     ref_clean = _to_finite_array(reference)
     cur_clean = _to_finite_array(current)
     if ref_clean.size == 0 and cur_clean.size == 0:
@@ -175,6 +190,7 @@ def compute_js_categorical(
     eps: float = 1e-8,
 ) -> tuple[float, list[str], dict[str, float], dict[str, float]]:
     """Compute base-2 Jensen-Shannon divergence and unseen categories for categorical data."""
+    _validate_eps(eps)
     ref_s = pd.Series(reference).dropna().astype(str)
     cur_s = pd.Series(current).dropna().astype(str)
 

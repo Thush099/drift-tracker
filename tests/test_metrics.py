@@ -92,6 +92,31 @@ class TestCategoricalMetrics:
         assert psi > 0.25
 
 
+@pytest.mark.parametrize("eps", [0.0, -1.0, float("nan"), float("inf")])
+def test_distribution_metrics_reject_invalid_smoothing(eps: float) -> None:
+    values = [0.0, 1.0, 2.0]
+    calls = (
+        lambda: compute_psi(values, values, eps=eps),
+        lambda: compute_discrete_psi(values, values, eps=eps),
+        lambda: compute_js_numeric(values, values, eps=eps),
+        lambda: compute_js_categorical(values, values, eps=eps),
+    )
+
+    for call in calls:
+        with pytest.raises(ValueError, match="eps must be finite and positive"):
+            call()
+
+
+@pytest.mark.parametrize("n_bins", [1, 2.5, True])
+def test_numeric_distribution_metrics_reject_invalid_bin_counts(n_bins: int) -> None:
+    values = [0.0, 1.0, 2.0]
+
+    with pytest.raises(ValueError, match="n_bins must be an integer >= 2"):
+        compute_psi(values, values, n_bins=n_bins)
+    with pytest.raises(ValueError, match="n_bins must be an integer >= 2"):
+        compute_js_numeric(values, values, n_bins=n_bins)
+
+
 class TestSeverityAndHistogramHelpers:
     def test_max_severity_ranks_alert_above_warn_above_ok(self) -> None:
         assert max_severity("OK", "WARN", "ALERT") == "ALERT"
