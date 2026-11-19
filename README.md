@@ -11,7 +11,7 @@ Silent covariate shifts, schema changes, unseen categorical values, and missing-
 | Check Category | Metric / Rule | `OK` | `WARN` | `ALERT` |
 |---|---|---|---|---|
 | **Numeric Feature Drift** | Population Stability Index (`compute_psi`, 10 quantile bins + smoothing) | `< 0.10` | `0.10 – 0.25` | `>= 0.25` |
-| | Two-sample Kolmogorov–Smirnov (`ks_2samp` statistic & p-value) | Reported alongside PSI | — | — |
+| | Two-sample Kolmogorov–Smirnov (`ks_2samp` statistic & p-value) | Reported alongside PSI | `p < ks_alpha` adds at least `WARN` | — |
 | | Jensen–Shannon Divergence (base 2, `[0, 1]`) | `< 0.05` | `0.05 – 0.15` | `>= 0.15` |
 | **Categorical Feature Drift** | Jensen–Shannon Divergence (base 2, `[0, 1]`) | `< 0.05` | `0.05 – 0.15` | `>= 0.15` |
 | | Unseen Categories (`new_categories`) | None | Unseen rate `< 10%` | Unseen rate `>= 10%` |
@@ -47,6 +47,8 @@ python main.py \
 ```
 
 Use `--demo` to generate fresh synthetic reference & drifted batches in memory.
+
+KS significance is a secondary warning signal (`ks_alpha=0.05` by default), not an effect-size measure. Large batches can make small shifts statistically significant, so interpret KS alongside PSI/JS and domain context; KS can raise a status to `WARN` but never by itself creates an `ALERT`.
 
 Additional flags: `--target-col` (default `target`) names an optional ground-truth
 label column that is excluded from feature drift checks, and `--seed` (default `42`)

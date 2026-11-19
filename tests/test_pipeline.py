@@ -47,6 +47,32 @@ class TestDriftTrackerPipeline:
         assert quality.cur_null_rate == 1.0
         assert quality.status == "ALERT"
 
+    def test_ks_significance_warns_for_small_numeric_shift(self) -> None:
+        rng = np.random.default_rng(1729)
+        reference = pd.DataFrame({"x": rng.normal(0.0, 1.0, 5000)})
+        current = pd.DataFrame({"x": rng.normal(0.04, 1.0, 5000)})
+
+        report = DriftTracker().compare(reference, current)
+
+        feature = report.numeric_features[0]
+        assert feature.psi < DriftTrackerConfig().psi_warn
+        assert feature.js_divergence < DriftTrackerConfig().js_warn
+        assert feature.ks_pvalue < DriftTrackerConfig().ks_alpha
+        assert feature.status == "WARN"
+
+    def test_ks_significance_uses_configured_alpha_and_does_not_override_alert(self) -> None:
+        rng = np.random.default_rng(1729)
+        reference = pd.DataFrame({"x": rng.normal(0.0, 1.0, 5000)})
+        slightly_shifted = pd.DataFrame({"x": rng.normal(0.04, 1.0, 5000)})
+        not_significant_at_alpha = DriftTracker(
+            config=DriftTrackerConfig(ks_alpha=0.01)
+        ).compare(reference, slightly_shifted)
+        assert not_significant_at_alpha.numeric_features[0].status == "OK"
+
+        strongly_shifted = pd.DataFrame({"x": rng.normal(1.2, 1.0, 5000)})
+        alert_report = DriftTracker().compare(reference, strongly_shifted)
+        assert alert_report.numeric_features[0].status == "ALERT"
+
     def test_identical_reference_and_current_all_ok(self) -> None:
         ref_df, _ = generate_demo_datasets(n_ref=500, n_cur=500, seed=42)
         tracker = DriftTracker()

@@ -168,6 +168,7 @@ class DriftTracker:
         status = max_severity(
             classify_psi(psi, cfg.psi_warn, cfg.psi_alert),
             classify_js(js_div, cfg.js_warn, cfg.js_alert),
+            "WARN" if ks_pval < cfg.ks_alpha else "OK",
         )
         return NumericDriftResult(
             column=col,
@@ -236,6 +237,7 @@ class DriftTracker:
             status = max_severity(
                 classify_psi(psi, cfg.psi_warn, cfg.psi_alert),
                 classify_js(js_div, cfg.js_warn, cfg.js_alert),
+                "WARN" if ks_pval < cfg.ks_alpha else "OK",
             )
             return PredictionDriftResult(
                 column=col,
