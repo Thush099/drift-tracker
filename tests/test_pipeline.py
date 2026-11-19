@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -12,11 +13,40 @@ import pandas as pd
 import pytest
 
 import main as cli_main
+from config import DriftTrackerConfig
 from src.pipeline import DriftTracker
 from src.utils import generate_demo_datasets
 
 
 class TestDriftTrackerPipeline:
+    @pytest.mark.parametrize(
+        ("overrides", "message"),
+        [
+            ({"psi_warn": 0.3, "psi_alert": 0.2}, "psi_warn must be less than psi_alert"),
+            ({"ks_alpha": 1.0}, "ks_alpha must be in (0, 1)"),
+            ({"null_delta_alert": 1.1}, "null_delta_alert must be in [0, 1]"),
+            ({"n_bins": 1}, "n_bins must be >= 2"),
+            ({"psi_eps": 0.0}, "psi_eps must be finite and positive"),
+        ],
+    )
+    def test_invalid_config_thresholds_fail_fast(
+        self, overrides: dict[str, object], message: str
+    ) -> None:
+        with pytest.raises(ValueError, match=re.escape(message)):
+            DriftTrackerConfig(**overrides)  # type: ignore[arg-type]
+
+    def test_fully_null_current_column_is_alert_even_if_reference_is_also_null(self) -> None:
+        ref = pd.DataFrame({"unusable": [np.nan] * 5})
+        cur = pd.DataFrame({"unusable": [np.nan] * 5})
+
+        report = DriftTracker().compare(ref, cur)
+
+        assert report.overall_status == "ALERT"
+        quality = report.data_quality[0]
+        assert quality.column == "unusable"
+        assert quality.cur_null_rate == 1.0
+        assert quality.status == "ALERT"
+
     def test_identical_reference_and_current_all_ok(self) -> None:
         ref_df, _ = generate_demo_datasets(n_ref=500, n_cur=500, seed=42)
         tracker = DriftTracker()

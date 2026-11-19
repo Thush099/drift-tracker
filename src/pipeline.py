@@ -98,7 +98,7 @@ class DriftTracker:
         cur_null = float(cur_s.isna().mean()) if len(cur_s) else 0.0
         null_delta = cur_null - ref_null
 
-        if abs(null_delta) >= cfg.null_delta_alert or (cur_null == 1.0 and ref_null < 1.0):
+        if abs(null_delta) >= cfg.null_delta_alert or cur_null == 1.0:
             null_status: Severity = "ALERT"
         elif abs(null_delta) >= cfg.null_delta_warn:
             null_status = "WARN"

@@ -16,7 +16,7 @@ Silent covariate shifts, schema changes, unseen categorical values, and missing-
 | **Categorical Feature Drift** | Jensen–Shannon Divergence (base 2, `[0, 1]`) | `< 0.05` | `0.05 – 0.15` | `>= 0.15` |
 | | Unseen Categories (`new_categories`) | None | Unseen rate `< 10%` | Unseen rate `>= 10%` |
 | **Prediction Drift** | Probability score PSI & KS test / Class PSI & JS divergence | `< 0.10` PSI | `0.10 – 0.25` PSI / unseen class | `>= 0.25` PSI |
-| **Data Quality** | Null-rate delta (`cur_null - ref_null`) | `< 2%` | `2% – 5%` | `>= 5%` (or 100% null) |
+| **Data Quality** | Null-rate delta (`cur_null - ref_null`) | `< 2%` | `2% – 5%` | `>= 5%` or current batch is 100% null |
 | | Out-of-range rate (vs. reference `[min, max]`) | `< 1%` | `1% – 5%` | `>= 5%` |
 | **Schema Validation** | Missing, extra, or dtype-mismatched columns | None | Extra columns | Missing / dtype mismatch |
 
