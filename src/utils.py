@@ -128,6 +128,10 @@ def generate_demo_datasets(
 
 def load_csv_pair(reference_path: str | Path, current_path: str | Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Load reference and current CSV files into DataFrames."""
+    for label, raw in (("reference", reference_path), ("current", current_path)):
+        path = Path(raw)
+        if not path.is_file():
+            raise FileNotFoundError(f"{label} CSV file not found: {path}")
     ref_df = pd.read_csv(reference_path)
     cur_df = pd.read_csv(current_path)
     return ref_df, cur_df

@@ -237,3 +237,21 @@ class TestFailOnExitCode:
 
         code = cli_main.main(["--demo", "--fail-on", "alert"])
         assert code == 1
+
+
+class TestCsvPairLoading:
+    def test_missing_reference_names_the_reference_file(self, tmp_path) -> None:
+        from src.utils import load_csv_pair
+
+        cur = tmp_path / "cur.csv"
+        cur.write_text("a\n1\n", encoding="utf-8")
+        with pytest.raises(FileNotFoundError, match="reference CSV file not found"):
+            load_csv_pair(tmp_path / "ref.csv", cur)
+
+    def test_missing_current_names_the_current_file(self, tmp_path) -> None:
+        from src.utils import load_csv_pair
+
+        ref = tmp_path / "ref.csv"
+        ref.write_text("a\n1\n", encoding="utf-8")
+        with pytest.raises(FileNotFoundError, match="current CSV file not found"):
+            load_csv_pair(ref, tmp_path / "cur.csv")
