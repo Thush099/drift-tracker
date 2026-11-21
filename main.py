@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from config import DriftTrackerConfig
+from src.models import DriftReport
 from src.pipeline import DriftTracker
 from src.utils import generate_demo_datasets, load_csv_pair
 
@@ -69,7 +70,37 @@ def build_parser() -> argparse.ArgumentParser:
         default=42,
         help="Random seed when generating synthetic demo data.",
     )
+    parser.add_argument(
+        "--fail-on",
+        choices=["none", "alert", "warn"],
+        default="none",
+        help=(
+            "Exit non-zero to gate a pipeline: 'alert' fails on ALERT findings, "
+            "'warn' also fails on WARN findings. Default 'none' always exits 0."
+        ),
+    )
     return parser
+
+
+def exit_code_for(report: DriftReport, fail_on: str) -> int:
+    """Map a drift report to a process exit code under the chosen gate.
+
+    Returns 0 when the gate is satisfied and 1 when the run should fail the
+    calling pipeline. ``fail_on`` must be one of ``none``, ``alert``, or
+    ``warn``; unknown values raise ``ValueError`` so a typo cannot silently
+    disable gating.
+    """
+    if fail_on not in {"none", "alert", "warn"}:
+        raise ValueError(
+            f"fail_on must be one of 'none', 'alert', 'warn'; got {fail_on!r}"
+        )
+    if fail_on == "none":
+        return 0
+
+    status = report.overall_status
+    if fail_on == "alert":
+        return 1 if status == "ALERT" else 0
+    return 1 if status in {"ALERT", "WARN"} else 0
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -108,7 +139,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         args.output_markdown.write_text(markdown + "\n", encoding="utf-8")
         print(f"Saved Markdown report to {args.output_markdown}")
 
-    return 0
+    return exit_code_for(report, args.fail_on)
 
 
 if __name__ == "__main__":

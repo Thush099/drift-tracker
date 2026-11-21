@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -12,11 +13,66 @@ import pandas as pd
 import pytest
 
 import main as cli_main
+from config import DriftTrackerConfig
 from src.pipeline import DriftTracker
 from src.utils import generate_demo_datasets
 
 
 class TestDriftTrackerPipeline:
+    @pytest.mark.parametrize(
+        ("overrides", "message"),
+        [
+            ({"psi_warn": 0.3, "psi_alert": 0.2}, "psi_warn must be less than psi_alert"),
+            ({"ks_alpha": 1.0}, "ks_alpha must be in (0, 1)"),
+            ({"null_delta_alert": 1.1}, "null_delta_alert must be in [0, 1]"),
+            ({"n_bins": 1}, "n_bins must be >= 2"),
+            ({"psi_eps": 0.0}, "psi_eps must be finite and positive"),
+        ],
+    )
+    def test_invalid_config_thresholds_fail_fast(
+        self, overrides: dict[str, object], message: str
+    ) -> None:
+        with pytest.raises(ValueError, match=re.escape(message)):
+            DriftTrackerConfig(**overrides)  # type: ignore[arg-type]
+
+    def test_fully_null_current_column_is_alert_even_if_reference_is_also_null(self) -> None:
+        ref = pd.DataFrame({"unusable": [np.nan] * 5})
+        cur = pd.DataFrame({"unusable": [np.nan] * 5})
+
+        report = DriftTracker().compare(ref, cur)
+
+        assert report.overall_status == "ALERT"
+        quality = report.data_quality[0]
+        assert quality.column == "unusable"
+        assert quality.cur_null_rate == 1.0
+        assert quality.status == "ALERT"
+
+    def test_ks_significance_warns_for_small_numeric_shift(self) -> None:
+        rng = np.random.default_rng(1729)
+        reference = pd.DataFrame({"x": rng.normal(0.0, 1.0, 5000)})
+        current = pd.DataFrame({"x": rng.normal(0.04, 1.0, 5000)})
+
+        report = DriftTracker().compare(reference, current)
+
+        feature = report.numeric_features[0]
+        assert feature.psi < DriftTrackerConfig().psi_warn
+        assert feature.js_divergence < DriftTrackerConfig().js_warn
+        assert feature.ks_pvalue < DriftTrackerConfig().ks_alpha
+        assert feature.status == "WARN"
+
+    def test_ks_significance_uses_configured_alpha_and_does_not_override_alert(self) -> None:
+        rng = np.random.default_rng(1729)
+        reference = pd.DataFrame({"x": rng.normal(0.0, 1.0, 5000)})
+        slightly_shifted = pd.DataFrame({"x": rng.normal(0.04, 1.0, 5000)})
+        not_significant_at_alpha = DriftTracker(
+            config=DriftTrackerConfig(ks_alpha=0.01)
+        ).compare(reference, slightly_shifted)
+        assert not_significant_at_alpha.numeric_features[0].status == "OK"
+
+        strongly_shifted = pd.DataFrame({"x": rng.normal(1.2, 1.0, 5000)})
+        alert_report = DriftTracker().compare(reference, strongly_shifted)
+        assert alert_report.numeric_features[0].status == "ALERT"
+
     def test_identical_reference_and_current_all_ok(self) -> None:
         ref_df, _ = generate_demo_datasets(n_ref=500, n_cur=500, seed=42)
         tracker = DriftTracker()
@@ -153,3 +209,75 @@ class TestCLI:
         assert "Drift Tracker Observability Report" in proc.stdout
         assert "credit_score" in proc.stdout
         assert "pred_proba" in proc.stdout
+
+
+class TestFailOnExitCode:
+    @staticmethod
+    def _report(status: str):
+        from src.models import DriftReport, SchemaCheckResult
+
+        return DriftReport(
+            reference_rows=10,
+            current_rows=10,
+            overall_status=status,
+            schema=SchemaCheckResult(
+                missing_columns=[], extra_columns=[], shared_columns=[], dtype_mismatches={}, status="OK"
+            ),
+        )
+
+    def test_fail_on_none_always_succeeds(self):
+        from main import exit_code_for
+
+        assert exit_code_for(self._report("ALERT"), "none") == 0
+
+    def test_fail_on_alert_gates_on_alert(self):
+        from main import exit_code_for
+
+        assert exit_code_for(self._report("ALERT"), "alert") == 1
+        assert exit_code_for(self._report("WARN"), "alert") == 0
+        assert exit_code_for(self._report("OK"), "alert") == 0
+
+    def test_fail_on_warn_gates_on_warn_and_alert(self):
+        from main import exit_code_for
+
+        assert exit_code_for(self._report("WARN"), "warn") == 1
+        assert exit_code_for(self._report("ALERT"), "warn") == 1
+        assert exit_code_for(self._report("OK"), "warn") == 0
+
+    def test_fail_on_rejects_unknown_level(self):
+        import pytest
+
+        from main import exit_code_for
+
+        with pytest.raises(ValueError, match="fail_on must be one of"):
+            exit_code_for(self._report("OK"), "bogus")
+
+    def test_cli_default_still_exits_zero(self, capsys):
+        import main as cli_main
+
+        code = cli_main.main(["--demo"])
+        assert code == 0
+
+    def test_cli_fail_on_alert_fails_on_drifted_demo(self, capsys):
+        import main as cli_main
+
+        code = cli_main.main(["--demo", "--fail-on", "alert"])
+        assert code == 1
+
+
+class TestCsvPairLoading:
+    def test_missing_reference_names_the_reference_file(self, tmp_path) -> None:
+        from src.utils import load_csv_pair
+
+        cur = tmp_path / "cur.csv"
+        cur.write_text("a\n1\n", encoding="utf-8")
+        with pytest.raises(FileNotFoundError, match="reference CSV file not found"):
+            load_csv_pair(tmp_path / "ref.csv", cur)
+
+    def test_missing_current_names_the_current_file(self, tmp_path) -> None:
+        from src.utils import load_csv_pair
+
+        ref = tmp_path / "ref.csv"
+        ref.write_text("a\n1\n", encoding="utf-8")
+        with pytest.raises(FileNotFoundError, match="current CSV file not found"):
+            load_csv_pair(ref, tmp_path / "cur.csv")

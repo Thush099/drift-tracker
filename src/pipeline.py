@@ -98,7 +98,7 @@ class DriftTracker:
         cur_null = float(cur_s.isna().mean()) if len(cur_s) else 0.0
         null_delta = cur_null - ref_null
 
-        if abs(null_delta) >= cfg.null_delta_alert or (cur_null == 1.0 and ref_null < 1.0):
+        if abs(null_delta) >= cfg.null_delta_alert or cur_null == 1.0:
             null_status: Severity = "ALERT"
         elif abs(null_delta) >= cfg.null_delta_warn:
             null_status = "WARN"
@@ -168,6 +168,7 @@ class DriftTracker:
         status = max_severity(
             classify_psi(psi, cfg.psi_warn, cfg.psi_alert),
             classify_js(js_div, cfg.js_warn, cfg.js_alert),
+            "WARN" if ks_pval < cfg.ks_alpha else "OK",
         )
         return NumericDriftResult(
             column=col,
@@ -236,6 +237,7 @@ class DriftTracker:
             status = max_severity(
                 classify_psi(psi, cfg.psi_warn, cfg.psi_alert),
                 classify_js(js_div, cfg.js_warn, cfg.js_alert),
+                "WARN" if ks_pval < cfg.ks_alpha else "OK",
             )
             return PredictionDriftResult(
                 column=col,
