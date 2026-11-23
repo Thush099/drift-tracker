@@ -133,3 +133,15 @@ pytest -v
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Web UI
+
+A local observability workbench drives the real tracker in the browser:
+
+```bash
+python ui/server.py            # http://127.0.0.1:8125
+```
+
+Compare reference vs current data (upload CSVs or use the generated demo), and read the
+OK / WARN / ALERT status, PSI/KS/JS feature drift gauges, data-quality deltas, and
+prediction drift. The server uses only the standard library and calls `DriftTracker.compare()`.

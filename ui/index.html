@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drift Observability — reference vs current</title>
+<style>
+  :root {
+    --bg: #14171c;
+    --panel: #1c2027;
+    --panel-2: #22262e;
+    --ink: #e8e9ec;
+    --ink-soft: #9aa0ab;
+    --rule: #2e333c;
+    --alert: #ff6b5e;
+    --warn: #f0b429;
+    --ok: #4cc38a;
+    --info: #6aa9ff;
+    --mono: "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); }
+  header { padding: 28px 24px 18px; border-bottom: 1px solid var(--rule); background: linear-gradient(180deg, #191d23, var(--bg)); }
+  header h1 { margin: 0; font: 600 clamp(21px, 3.2vw, 30px)/1.15 var(--sans); letter-spacing: -.01em; }
+  header h1 em { font-style: normal; color: var(--info); }
+  header p { margin: 8px 0 0; max-width: 68ch; color: var(--ink-soft); font-size: 14.5px; }
+  .layout { display: grid; grid-template-columns: minmax(300px, 360px) 1fr; gap: 18px; padding: 18px 24px 56px; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 17px 19px; }
+  .panel + .panel { margin-top: 15px; }
+  .panel h2 { margin: 0 0 3px; font: 600 16px/1.25 var(--sans); }
+  .meta { margin: 0 0 12px; color: var(--ink-soft); font-size: 12.5px; }
+  label { display: block; font: 600 11px/1 var(--sans); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); margin: 12px 0 6px; }
+  textarea, input[type="text"], input[type="number"], select {
+    width: 100%; border: 1px solid var(--rule); border-radius: 4px; background: var(--panel-2);
+    color: var(--ink); font: 12.5px/1.5 var(--mono); padding: 8px 10px;
+  }
+  textarea { resize: vertical; min-height: 90px; }
+  textarea:focus-visible, input:focus-visible, select:focus-visible, button:focus-visible {
+    outline: 2px solid var(--info); outline-offset: 1px;
+  }
+  .switch { display: flex; align-items: center; gap: 9px; margin-top: 13px; font-size: 13px; color: var(--ink-soft); }
+  .switch input { width: 17px; height: 17px; accent-color: var(--info); }
+  .btnrow { display: flex; gap: 10px; margin-top: 15px; }
+  button { flex: 1; border: 0; border-radius: 4px; cursor: pointer; padding: 12px 14px; font: 600 14px/1 var(--sans); }
+  button.primary { background: var(--info); color: #0b1220; }
+  button.primary:hover { background: #5595ee; }
+  button.ghost { background: transparent; color: var(--info); border: 1px solid var(--info); }
+  button:disabled { opacity: .55; cursor: wait; }
+  .error { margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--alert); background: #2a1c1a; color: var(--alert); font-size: 13px; white-space: pre-wrap; }
+
+  .status-banner { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 6px; border: 1px solid var(--rule); }
+  .status-banner.ALERT { background: #2a1c1a; border-color: var(--alert); }
+  .status-banner.WARN { background: #2a2416; border-color: var(--warn); }
+  .status-banner.OK { background: #16251d; border-color: var(--ok); }
+  .status-dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+  .ALERT .status-dot { background: var(--alert); } .WARN .status-dot { background: var(--warn); } .OK .status-dot { background: var(--ok); }
+  .status-text { font: 600 22px/1.1 var(--sans); }
+  .ALERT .status-text { color: var(--alert); } .WARN .status-text { color: var(--warn); } .OK .status-text { color: var(--ok); }
+  .status-sub { color: var(--ink-soft); font-size: 13px; margin-top: 2px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font: 600 10.5px/1 var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-soft); background: var(--panel-2); position: sticky; top: 0; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font: 600 10.5px/1.7 var(--sans); }
+  .pill.ALERT { background: #3a211e; color: var(--alert); }
+  .pill.WARN { background: #352c15; color: var(--warn); }
+  .pill.OK { background: #1b3226; color: var(--ok); }
+  .gauge { height: 7px; border-radius: 4px; background: var(--panel-2); overflow: hidden; margin-top: 5px; }
+  .gauge i { display: block; height: 100%; border-radius: 4px; }
+  .gauge i.ALERT { background: var(--alert); } .gauge i.WARN { background: var(--warn); } .gauge i.OK { background: var(--ok); }
+  .wrap { overflow-x: auto; }
+  .flag { color: var(--alert); font-weight: 600; }
+  .warn-text { color: var(--warn); }
+  .empty { padding: 20px; text-align: center; color: var(--ink-soft); font-size: 13px; }
+  .alert-list { margin: 0; padding-left: 18px; }
+  .alert-list li { margin: 5px 0; font-size: 13px; color: var(--warn); }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; font-size: 12.5px; color: var(--info); font-weight: 600; }
+  pre { background: #0f1216; color: #d6dae0; padding: 12px; border-radius: 4px; overflow: auto; font: 11px/1.5 var(--mono); max-height: 300px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Drift <em>observability</em></h1>
+  <p>Compare a reference window against a current batch with the real tracker: schema checks,
+  per-feature population stability (PSI / KS / Jensen–Shannon), data-quality deltas, and
+  prediction drift — graded OK / WARN / ALERT.</p>
+</header>
+
+<div class="layout">
+  <form class="panel" id="form">
+    <h2>Comparison</h2>
+    <p class="meta">Runs <code>DriftTracker.compare()</code> from <code>src/pipeline.py</code>.</p>
+
+    <label class="switch">
+      <input type="checkbox" id="use-demo" checked>
+      <span>Use generated demo datasets</span>
+    </label>
+
+    <div id="csv-inputs" hidden>
+      <label for="reference">Reference CSV</label>
+      <textarea id="reference" placeholder="id,feature,prediction&#10;1,0.5,1"></textarea>
+      <label for="current">Current CSV</label>
+      <textarea id="current" placeholder="id,feature,prediction&#10;1,0.7,1"></textarea>
+    </div>
+
+    <label for="prediction_col">Prediction column</label>
+    <input type="text" id="prediction_col" value="prediction">
+    <label for="proba_col">Probability column</label>
+    <input type="text" id="proba_col" value="pred_proba">
+    <label for="target_col">Target column</label>
+    <input type="text" id="target_col" value="target">
+
+    <div class="btnrow">
+      <button type="submit" class="primary" id="run">Run comparison</button>
+    </div>
+    <div class="error" id="error" hidden></div>
+  </form>
+
+  <section>
+    <div class="panel" id="status-panel" hidden>
+      <div class="status-banner" id="status-banner">
+        <div class="status-dot"></div>
+        <div>
+          <div class="status-text" id="status-text"></div>
+          <div class="status-sub" id="status-sub"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="numeric-panel" hidden>
+      <h2>Numeric feature drift</h2>
+      <p class="meta">PSI gauges scaled 0–1 (higher means more drift).</p>
+      <div class="wrap"><table id="numeric-table"></table></div>
+    </div>
+
+    <div class="panel" id="categorical-panel" hidden>
+      <h2>Categorical feature drift</h2>
+      <div class="wrap"><table id="categorical-table"></table></div>
+    </div>
+
+    <div class="panel" id="quality-panel" hidden>
+      <h2>Data quality</h2>
+      <div class="wrap"><table id="quality-table"></table></div>
+    </div>
+
+    <div class="panel" id="alerts-panel" hidden>
+      <h2>Alerts &amp; warnings</h2>
+      <ul class="alert-list" id="alerts-list"></ul>
+    </div>
+
+    <details id="raw-details" hidden>
+      <summary>Show raw JSON report</summary>
+      <pre id="raw"></pre>
+    </details>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const pct = (x) => x == null ? "—" : `${(100 * x).toFixed(1)}%`;
+  const num = (x, d = 3) => x == null ? "—" : Number(x).toFixed(d);
+
+  $("use-demo").addEventListener("change", () => {
+    $("csv-inputs").hidden = $("use-demo").checked;
+  });
+
+  function renderStatus(r) {
+    const status = r.overall_status || "OK";
+    const banner = $("status-banner");
+    banner.className = `status-banner ${status}`;
+    $("status-text").textContent = status;
+    $("status-sub").textContent =
+      `${r.reference_rows.toLocaleString()} reference rows vs ${r.current_rows.toLocaleString()} current rows · ` +
+      `${(r.alerts || []).length} alert(s), ${(r.warnings || []).length} warning(s)`;
+    $("status-panel").hidden = false;
+  }
+
+  function renderNumeric(rows) {
+    if (!rows || !rows.length) { $("numeric-panel").hidden = true; return; }
+    $("numeric-table").innerHTML =
+      `<thead><tr><th>Feature</th><th>PSI</th><th>KS</th><th>JS</th><th>Mean ref → cur</th><th>State</th></tr></thead><tbody>` +
+      rows.map((f) => {
+        const width = Math.min(100, 100 * (f.psi || 0) / 1);
+        return `<tr>
+          <td><b>${esc(f.column)}</b><div class="gauge"><i class="${esc(f.status)}" style="width:${Math.max(2, width)}%"></i></div></td>
+          <td class="num">${num(f.psi, 3)}</td>
+          <td class="num">${num(f.ks_statistic, 3)}</td>
+          <td class="num">${num(f.js_divergence, 3)}</td>
+          <td class="num">${num(f.ref_mean)} → ${num(f.cur_mean)}</td>
+          <td><span class="pill ${esc(f.status)}">${esc(f.status)}</span></td>
+        </tr>`;
+      }).join("") + `</tbody>`;
+    $("numeric-panel").hidden = false;
+  }
+
+  function renderCategorical(rows) {
+    if (!rows || !rows.length) { $("categorical-panel").hidden = true; return; }
+    $("categorical-table").innerHTML =
+      `<thead><tr><th>Feature</th><th>JS divergence</th><th>Unseen rate</th><th>State</th></tr></thead><tbody>` +
+      rows.map((f) => `<tr>
+        <td><b>${esc(f.column)}</b></td>
+        <td class="num">${num(f.js_divergence, 3)}</td>
+        <td class="num ${f.unseen_rate > 0 ? "warn-text" : ""}">${pct(f.unseen_rate)}</td>
+        <td><span class="pill ${esc(f.status)}">${esc(f.status)}</span></td>
+      </tr>`).join("") + `</tbody>`;
+    $("categorical-panel").hidden = false;
+  }
+
+  function renderQuality(rows) {
+    if (!rows || !rows.length) { $("quality-panel").hidden = true; return; }
+    $("quality-table").innerHTML =
+      `<thead><tr><th>Column</th><th>Null ref → cur</th><th>Δ null rate</th><th>Out of range</th><th>State</th></tr></thead><tbody>` +
+      rows.map((q) => `<tr>
+        <td><b>${esc(q.column)}</b></td>
+        <td class="num">${pct(q.ref_null_rate)} → ${pct(q.cur_null_rate)}</td>
+        <td class="num ${Math.abs(q.null_rate_delta) > 0.1 ? "flag" : ""}">${num(q.null_rate_delta, 3)}</td>
+        <td class="num ${q.out_of_range_count ? "flag" : ""}">${q.out_of_range_count}</td>
+        <td><span class="pill ${esc(q.status || "OK")}">${esc(q.status || "OK")}</span></td>
+      </tr>`).join("") + `</tbody>`;
+    $("quality-panel").hidden = false;
+  }
+
+  function renderAlerts(r) {
+    const items = [
+      ...(r.alerts || []).map((a) => ({ kind: "alert", text: a })),
+      ...(r.warnings || []).map((w) => ({ kind: "warn", text: w })),
+    ];
+    if (!items.length) { $("alerts-panel").hidden = true; return; }
+    $("alerts-list").innerHTML = items.map((i) =>
+      `<li style="color:${i.kind === "alert" ? "var(--alert)" : "var(--warn)"}">${esc(i.text)}</li>`).join("");
+    $("alerts-panel").hidden = false;
+  }
+
+  $("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("run");
+    btn.disabled = true; btn.textContent = "Comparing…";
+    $("error").hidden = true;
+    const useDemo = $("use-demo").checked;
+    try {
+      const res = await fetch("/api/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          use_demo: useDemo,
+          reference_csv: useDemo ? null : $("reference").value,
+          current_csv: useDemo ? null : $("current").value,
+          prediction_col: $("prediction_col").value.trim() || null,
+          proba_col: $("proba_col").value.trim() || null,
+          target_col: $("target_col").value.trim() || null,
+        }),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error || `Request failed (${res.status})`);
+      renderStatus(payload);
+      renderNumeric(payload.numeric_features);
+      renderCategorical(payload.categorical_features);
+      renderQuality(payload.data_quality);
+      renderAlerts(payload);
+      $("raw").textContent = JSON.stringify(payload, null, 2);
+      $("raw-details").hidden = false;
+    } catch (err) {
+      $("error").textContent = err.message;
+      $("error").hidden = false;
+    } finally {
+      btn.disabled = false; btn.textContent = "Run comparison";
+    }
+  });
+
+  $("form").dispatchEvent(new Event("submit"));
+})();
+</script>
+</body>
+</html>
