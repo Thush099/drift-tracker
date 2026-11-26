@@ -1,5 +1,7 @@
 # Drift Tracker
 
+[![CI](https://github.com/Thush099/drift-tracker/actions/workflows/tests.yml/badge.svg)](https://github.com/Thush099/drift-tracker/actions/workflows/tests.yml)
+
 Batch ML observability tool for monitoring numeric & categorical feature drift, prediction drift, schema integrity, and data quality between a reference dataset and a production batch.
 
 ## Problem Statement
