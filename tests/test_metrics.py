@@ -149,3 +149,31 @@ class TestSeverityAndHistogramHelpers:
         probs = _smoothed_proportions(np.array([3.0, 1.0, 0.0]), eps=1e-6)
         assert probs.sum() == pytest.approx(1.0)
         assert np.all(probs > 0.0)
+
+
+def test_metric_degenerate_inputs_return_documented_constants() -> None:
+    """Empty-side inputs hit documented early returns: no data together scores 0.0,
+    one side missing scores 1.0 (maximum drift)."""
+    assert compute_psi([], []) == 0.0
+    assert compute_psi([1.0, 2.0], []) == 1.0
+    assert compute_psi([], [1.0]) == 1.0
+
+    assert compute_discrete_psi([], []) == 0.0
+    assert compute_discrete_psi(["a", "b"], []) == 1.0
+
+    assert compute_ks_test([], []) == (0.0, 1.0)
+    assert compute_ks_test([1.0], []) == (1.0, 0.0)
+    assert compute_ks_test([], [1.0]) == (1.0, 0.0)
+
+    assert compute_js_numeric([], []) == 0.0
+    assert compute_js_numeric([1.0, 2.0], []) == 1.0
+
+
+def test_js_categorical_degenerate_and_one_empty_paths() -> None:
+    assert compute_js_categorical([], []) == (0.0, [], {}, {})
+    score, new_cats, _, _ = compute_js_categorical([], ["b", "c"])
+    assert score == 1.0
+    assert new_cats == ["b", "c"]
+    score, new_cats, _, _ = compute_js_categorical(["a"], [])
+    assert score == 1.0
+    assert new_cats == []
