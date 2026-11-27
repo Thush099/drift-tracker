@@ -281,3 +281,49 @@ class TestCsvPairLoading:
         ref.write_text("a\n1\n", encoding="utf-8")
         with pytest.raises(FileNotFoundError, match="current CSV file not found"):
             load_csv_pair(ref, tmp_path / "cur.csv")
+
+
+def test_dtype_mismatch_is_alert_and_recorded() -> None:
+    """A column flipping numeric<->categorical is schema drift: ALERT with details."""
+    tracker = DriftTracker()
+    reference = pd.DataFrame({"a": [1, 2, 3, 4]})
+    current = pd.DataFrame({"a": ["x", "y", "z", "w"]})
+    report = tracker.compare(reference, current)
+    mismatches = report.schema.dtype_mismatches
+    assert set(mismatches) == {"a"}
+    assert mismatches["a"] == (str(reference["a"].dtype), str(current["a"].dtype))
+    assert mismatches["a"][0] != mismatches["a"][1], "a real mismatch must record both dtype names"
+    assert report.schema.status == "ALERT"
+    assert any("dtype mismatch" in a.lower() for a in report.alerts), (
+        "the report must alert on dtype mismatches"
+    )
+
+
+def test_extra_column_only_warns() -> None:
+    tracker = DriftTracker()
+    reference = pd.DataFrame({"a": [1, 2, 3, 4]})
+    current = pd.DataFrame({"a": [1, 2, 3, 4], "b": [5, 6, 7, 8]})
+    report = tracker.compare(reference, current)
+    assert report.schema.extra_columns == ["b"]
+    assert report.schema.status == "WARN"
+
+
+def test_compare_rejects_empty_frames() -> None:
+    tracker = DriftTracker()
+    frame = pd.DataFrame({"a": [1, 2]})
+    with pytest.raises(ValueError, match="Reference DataFrame must not be empty"):
+        tracker.compare(pd.DataFrame(), frame)
+    with pytest.raises(ValueError, match="Current DataFrame must not be empty"):
+        tracker.compare(frame, pd.DataFrame())
+
+
+def test_non_numeric_prediction_keeps_ks_neutral() -> None:
+    """Class-label predictions have no numeric KS — the statistic stays neutral (0, 1)."""
+    tracker = DriftTracker()
+    reference = pd.DataFrame({"prediction": ["ok", "ok", "fail", "ok"]})
+    current = pd.DataFrame({"prediction": ["ok", "fail", "fail", "ok"]})
+    report = tracker.compare(reference, current)
+    pred = next(p for p in report.predictions if p.column == "prediction")
+    assert pred.kind == "class"
+    assert pred.ks_statistic == 0.0 and pred.ks_pvalue == 1.0
+    assert pred.new_classes == []
